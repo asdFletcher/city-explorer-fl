@@ -1,6 +1,6 @@
 'use strict';
 
-console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
+// console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
 
 // Application Dependencies
 const express = require('express');
@@ -17,7 +17,7 @@ app.use(cors());
 
 // API Routes
 app.get('/location', (request, response) => {
-  console.log('location route hit');
+  // console.log('location route hit');
   searchToLatLong(request.query.data)
     .then(location => { 
       // console.log('this is our location', location);
@@ -49,8 +49,6 @@ function Location(query, res) {
   this.formatted_query = res.body.results[0].formatted_address;
   this.latitude = res.body.results[0].geometry.location.lat;
   this.longitude = res.body.results[0].geometry.location.lng;
-  console.log('lat: ', this.latitude);
-  console.log('lon: ', this.longitude);
 }
 
 function Weather(day) {
@@ -77,7 +75,6 @@ function Movie(movieDBData) {
 }
 
 function Meetup(meetupAPIData) {
-  console.log('~~~~~~~~~~~~~');
   this.link = meetupAPIData.link;
   this.name = meetupAPIData.name;
 
@@ -87,14 +84,12 @@ function Meetup(meetupAPIData) {
     let tempDate = new Date(meetupAPIData.created);
     this.creation_date = tempDate.toLocaleDateString("en-US", {weekday: "short", year: "numeric", month:"short", day:"numeric", hour:"numeric"});
   }
-
   this.host = meetupAPIData.group.name;
-  console.log('resulting object: ', this);
 }
 
 // Helper Functions
 function searchToLatLong(query) {
-  console.log('location route hit');
+  // console.log('location route hit');
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
   return superagent.get(url)
     .then((res) => {
@@ -104,7 +99,7 @@ function searchToLatLong(query) {
 }
 
 function getWeather(request, response) {
-  console.log('weather route hit');
+  // console.log('weather route hit');
   const url = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`;
   superagent.get(url)
     .then((result) => {
@@ -114,7 +109,7 @@ function getWeather(request, response) {
 }
 
 function getRestaurant(request, response) { 
-  console.log('restaurant route hit')
+  // console.log('restaurant route hit');
   const url = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.data.latitude}&longitude=${request.query.data.longitude}`;
   superagent.get(url)
     .set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
@@ -125,10 +120,8 @@ function getRestaurant(request, response) {
 }
 
 function getMovies(request, response) {
-  console.log('movies route hit');
-
+  // console.log('movies route hit');
   const url = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&include_adult=false&include_video=false&query=${request.query.data.search_query}`;
-
   superagent.get(url)
     .then((tmdbResponse) => {
       response.send( tmdbResponse.body.results.map( (tmdbData) => new Movie(tmdbData)) );
@@ -137,13 +130,10 @@ function getMovies(request, response) {
 }
 
 function getMeetups(request, response) {
-  console.log('meetups route hit');
+  // console.log('meetups route hit');
   const url = `https://api.meetup.com/find/upcoming_events?lat=${request.query.data.latitude}&lon=${request.query.data.longitude}&key=${process.env.MEETUPS_API_KEY}&sign=true`;
   superagent.get(url)
     .then( (res) => {
-      // console.log('response: ', res);
-      console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~');
-      // console.log('response: ', res.body.events);
       const meetupsArray = res.body.events.map( (rawEventData) => {
         return new Meetup(rawEventData);
       } );
