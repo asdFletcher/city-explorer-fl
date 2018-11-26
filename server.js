@@ -30,6 +30,8 @@ app.get('/weather', getWeather);
 
 app.get('/yelp', getRestaurant);
 
+app.get('/movies', getMovies);
+
 // Make sure the server is listening for requests
 app.listen(PORT, () => console.log(`Listening on ${PORT}`));
 
@@ -58,6 +60,18 @@ function Yelp(restaurant) {
   this.price = restaurant.price;
   this.rating = restaurant.rating;
   this.url = restaurant.url;
+}
+
+function Movie(movieDBData) {
+  // console.log('~~~   ~~~   ~~~   ~~~');
+  // console.log(movieDBData);
+  this.title = movieDBData.title; //
+  this.overview = movieDBData.overview; //
+  this.average_votes = movieDBData.vote_average; //
+  this.total_votes = movieDBData.vote_count; //
+  this.image_url = movieDBData.poster_path; //
+  this.popularity = movieDBData.popularity; //
+  this.released_on = movieDBData.release_date; //
 }
 
 // Helper Functions
@@ -104,3 +118,17 @@ function getRestaurant(request, response) {
             .catch(error => handleError(error, response));
 }
 
+function getMovies(request, response) {
+  console.log('movies route hit');
+  // console.log('request.query.data.search_query: ', request.query.data.search_query);
+  // console.log('process.env.TMDB_API_KEY: ', process.env.TMDB_API_KEY);
+  const url = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&include_adult=false&include_video=false&query=${request.query.data.search_query}`;
+  console.log(`movies url: ${url}`);
+  superagent.get(url)
+            .then((tmdbResponse) => {
+              // console.log('#################   ###################')
+              // console.log(tmdbResponse.body.results)
+              response.send (tmdbResponse.body.results.map( (tmdbData) => new Movie(tmdbData)));
+            })
+            .catch(error => handleError(error, response));
+}
