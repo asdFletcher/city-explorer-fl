@@ -1,5 +1,7 @@
 'use strict';
 
+console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
+
 // Application Dependencies
 const express = require('express');
 const superagent = require('superagent');
@@ -18,7 +20,7 @@ app.get('/location', (request, response) => {
   console.log('location route hit');
   searchToLatLong(request.query.data)
     .then(location => { 
-      console.log('this is our location', location);
+      // console.log('this is our location', location);
       return response.send(location)
     })
     .catch(error => handleError(error, response));
@@ -60,9 +62,9 @@ function Yelp(restaurant) {
 
 // Helper Functions
 function searchToLatLong(query) {
-  console.log('this is our query', query);
+  // console.log('this is our query', query);
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
-  console.log('this is the url', url);
+  // console.log('this is the google maps url', url);
   return superagent.get(url)
     .then((res) => {
       return new Location(query, res);
@@ -71,8 +73,8 @@ function searchToLatLong(query) {
 }
 
 function getWeather(request, response) {
+  console.log('weather route hit');
   const url = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`;
-
   superagent.get(url)
     .then((result) => {
       const weatherSummaries = result.body.daily.data.map(day => {
@@ -86,18 +88,18 @@ function getWeather(request, response) {
 }
 
 function getRestaurant(request, response) { 
-  console.log('restaurant function called')
+  console.log('restaurant route hit')
   const url = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.data.latitude}&longitude=${request.query.data.longitude}`;
   superagent.get(url)
             .set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
             .then((yelp_API_response) =>  { 
-              console.log('getting stuff');
+              // console.log('getting stuff');
               const yelpSummaries = yelp_API_response.body.businesses.map(restaurant => {
                 return new Yelp(restaurant);
               });
-              console.log('new rest', yelp_API_response);
+              // console.log('new rest', yelp_API_response);
               response.send(yelpSummaries);
-              console.log('summaries', yelpSummaries);
+              // console.log('summaries', yelpSummaries);
             })
             .catch(error => handleError(error, response));
 }
