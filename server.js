@@ -32,6 +32,8 @@ app.get('/yelp', getRestaurant);
 
 app.get('/movies', getMovies);
 
+app.get('/meetups', getMeetups);
+
 // Make sure the server is listening for requests
 app.listen(PORT, () => console.log(`Listening on ${PORT}`));
 
@@ -47,6 +49,8 @@ function Location(query, res) {
   this.formatted_query = res.body.results[0].formatted_address;
   this.latitude = res.body.results[0].geometry.location.lat;
   this.longitude = res.body.results[0].geometry.location.lng;
+  console.log('lat: ', this.latitude);
+  console.log('lon: ', this.longitude);
 }
 
 function Weather(day) {
@@ -63,22 +67,35 @@ function Yelp(restaurant) {
 }
 
 function Movie(movieDBData) {
-  // console.log('~~~   ~~~   ~~~   ~~~');
-  // console.log(movieDBData);
-  this.title = movieDBData.title; //
-  this.overview = movieDBData.overview; //
-  this.average_votes = movieDBData.vote_average; //
-  this.total_votes = movieDBData.vote_count; //
-  this.image_url = movieDBData.poster_path; //
-  this.popularity = movieDBData.popularity; //
-  this.released_on = movieDBData.release_date; //
+  this.title = movieDBData.title;
+  this.overview = movieDBData.overview;
+  this.average_votes = movieDBData.vote_average;
+  this.total_votes = movieDBData.vote_count;
+  this.image_url = movieDBData.poster_path;
+  this.popularity = movieDBData.popularity;
+  this.released_on = movieDBData.release_date;
+}
+
+function Meetup(meetupAPIData) {
+  console.log('~~~~~~~~~~~~~');
+  this.link = meetupAPIData.link;
+  this.name = meetupAPIData.name;
+
+  if (meetupAPIData.created === undefined){
+    this.creation_date = meetupAPIData.created = "Hidden";
+  } else {
+    let tempDate = new Date(meetupAPIData.created);
+    this.creation_date = tempDate.toLocaleDateString("en-US", {weekday: "short", year: "numeric", month:"short", day:"numeric", hour:"numeric"});
+  }
+
+  this.host = meetupAPIData.group.name;
+  console.log('resulting object: ', this);
 }
 
 // Helper Functions
 function searchToLatLong(query) {
-  // console.log('this is our query', query);
+  console.log('location route hit');
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
-  // console.log('this is the google maps url', url);
   return superagent.get(url)
     .then((res) => {
       return new Location(query, res);
@@ -91,12 +108,7 @@ function getWeather(request, response) {
   const url = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`;
   superagent.get(url)
     .then((result) => {
-      const weatherSummaries = result.body.daily.data.map(day => {
-        return new Weather(day);
-      });
-      // console.log('this is the weather', weatherSummaries);
-
-      response.send(weatherSummaries);
+      response.send( result.body.daily.data.map( (day) => new Weather(day)) );
     })
     .catch(error => handleError(error, response));
 }
@@ -105,30 +117,37 @@ function getRestaurant(request, response) {
   console.log('restaurant route hit')
   const url = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.data.latitude}&longitude=${request.query.data.longitude}`;
   superagent.get(url)
-            .set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
-            .then((yelp_API_response) =>  { 
-              // console.log('getting stuff');
-              const yelpSummaries = yelp_API_response.body.businesses.map(restaurant => {
-                return new Yelp(restaurant);
-              });
-              // console.log('new rest', yelp_API_response);
-              response.send(yelpSummaries);
-              // console.log('summaries', yelpSummaries);
-            })
-            .catch(error => handleError(error, response));
+    .set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
+    .then((yelp_API_response) =>  { 
+      response.send( yelp_API_response.body.businesses.map(restaurant => new Yelp(restaurant)) )
+    })
+    .catch(error => handleError(error, response));
 }
 
 function getMovies(request, response) {
   console.log('movies route hit');
-  // console.log('request.query.data.search_query: ', request.query.data.search_query);
-  // console.log('process.env.TMDB_API_KEY: ', process.env.TMDB_API_KEY);
+
   const url = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&include_adult=false&include_video=false&query=${request.query.data.search_query}`;
-  console.log(`movies url: ${url}`);
+
   superagent.get(url)
-            .then((tmdbResponse) => {
-              // console.log('#################   ###################')
-              // console.log(tmdbResponse.body.results)
-              response.send (tmdbResponse.body.results.map( (tmdbData) => new Movie(tmdbData)));
-            })
-            .catch(error => handleError(error, response));
+    .then((tmdbResponse) => {
+      response.send( tmdbResponse.body.results.map( (tmdbData) => new Movie(tmdbData)) );
+    })
+    .catch( (error) => handleError(error, response));
+}
+
+function getMeetups(request, response) {
+  console.log('meetups route hit');
+  const url = `https://api.meetup.com/find/upcoming_events?lat=${request.query.data.latitude}&lon=${request.query.data.longitude}&key=${process.env.MEETUPS_API_KEY}&sign=true`;
+  superagent.get(url)
+    .then( (res) => {
+      // console.log('response: ', res);
+      console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~');
+      // console.log('response: ', res.body.events);
+      const meetupsArray = res.body.events.map( (rawEventData) => {
+        return new Meetup(rawEventData);
+      } );
+      response.send( meetupsArray );
+    })
+    .catch( (error) => handleError(error, response) );
 }

@@ -51,6 +51,18 @@ Finish time: 1:40
 
 Actual time needed to complete: 2.5
 
+## Number and name of feature: Feature #4: Retrieve meetup information
+
+Estimate of time needed to complete: 30 min
+
+Start time: 12:40
+
+Finish time: 1:16
+
+Actual time needed to complete: 36 min
+
+
+
 
 
 
