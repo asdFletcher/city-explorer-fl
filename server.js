@@ -1,7 +1,5 @@
 'use strict';
 
-// console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
-
 // Application Dependencies
 const express = require('express');
 const superagent = require('superagent');
@@ -34,12 +32,13 @@ app.get('/movies', getMovies);
 
 app.get('/meetups', getMeetups);
 
+app.get('/trails', getTrails);
+
 // Make sure the server is listening for requests
 app.listen(PORT, () => console.log(`Listening on ${PORT}`));
 
 // Error handler
 function handleError(err, res) {
-  // console.error(err);
   if (res) res.status(500).send('Sorry, something went wrong');
 }
 
@@ -69,7 +68,7 @@ function Movie(movieDBData) {
   this.overview = movieDBData.overview;
   this.average_votes = movieDBData.vote_average;
   this.total_votes = movieDBData.vote_count;
-  this.image_url = movieDBData.poster_path;
+  this.image_url = `http://image.tmdb.org/t/p/w185//${movieDBData.poster_path}`;
   this.popularity = movieDBData.popularity;
   this.released_on = movieDBData.release_date;
 }
@@ -87,6 +86,25 @@ function Meetup(meetupAPIData) {
   this.host = meetupAPIData.group.name;
 }
 
+function Trail(trailObj) {
+  this.name = trailObj.name;
+  this.location = trailObj.location;
+  this.length = trailObj.length;
+  this.stars = trailObj.stars;
+  this.star_votes = trailObj.starVotes;
+  this.summary = trailObj.summary;
+  this.trail_url = trailObj.url;
+  this.conditions = trailObj.conditionStatus;
+
+  if (trailObj.conditionStatus === 'Unknown'){
+    this.condition_date = 'n/a';
+    this.condition_time = 'n/a';
+  } else {
+    let date = new Date(trailObj.conditionDate);
+    this.condition_date = date.toDateString()
+    this.condition_time = date.toTimeString()
+  }
+}
 // Helper Functions
 function searchToLatLong(query) {
   // console.log('location route hit');
@@ -140,4 +158,14 @@ function getMeetups(request, response) {
       response.send( meetupsArray );
     })
     .catch( (error) => handleError(error, response) );
+}
+
+function getTrails(request, response) {
+  // console.log('trails route hit');
+  const url = `https://www.hikingproject.com/data/get-trails?lat=${request.query.data.latitude}&lon=${request.query.data.longitude}&maxDistance=10&key=${process.env.TRAILS_API_KEY}`;
+  superagent.get(url)
+    .then( (trailAPIData) => {
+      response.send( trailAPIData.body.trails.map( (trailObj) => new Trail(trailObj)));
+    })
+    .catch( (error) => handleError(error, response));
 }

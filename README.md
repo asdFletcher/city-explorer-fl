@@ -61,7 +61,15 @@ Finish time: 1:16
 
 Actual time needed to complete: 36 min
 
+## Number and name of feature: Feature #5: Retrieve trails information
 
+Estimate of time needed to complete: 45 min
+
+Start time: 8:16 pm
+
+Finish time: 8:56 pm
+
+Actual time needed to complete: 40 min
 
 
 
