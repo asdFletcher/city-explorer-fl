@@ -14,10 +14,10 @@ const client = new pg.Client(process.env.DATABASE_URL);
 client.connect();
 client.on('error', (err) => console.error(err));
 // console.log('client: ', client);
-console.log('~~~~~~~~~');
-let test = client.query('SELECT * FROM locations')
-  .then( (response) => console.log(response));
-console.log(test);
+// console.log('~~~~~~~~~');
+// let test = client.query('SELECT * FROM locations')
+//   .then( (response) => console.log(response));
+// console.log(test);
 console.log('~~~~~~~~~');
 
 
@@ -49,12 +49,61 @@ function handleError(err, res) {
 
 // Models
 function Location(query, res) {
+  this.table_name = 'locations';
   this.search_query = query;
   this.formatted_query = res.body.results[0].formatted_address;
   this.latitude = res.body.results[0].geometry.location.lat;
   this.longitude = res.body.results[0].geometry.location.lng;
-
+  this.created_at = Date.now();
   // console.log(this);
+}
+
+Location.table_name = 'locations';
+
+Location.lookupLocation = (location) => {
+
+  // console.log('location params: ', location);
+  const SQL = `SELECT * FROM locations WHERE search_query=$1;`;
+  // const SQL = `SELECT * FROM $1 WHERE search_query=$2;`;
+  // const values = [Location.table_name, location.query];
+  const values = [location.query];
+  // console.log('values: ', values);
+  // console.log('SQL: ', SQL);
+
+  client.query(SQL, values)
+    .then( (dbResponse) => {
+      // console.log('dbResponse: ', dbResponse);
+      if (dbResponse.rowsCount > 0){
+        console.log('dbResponse.rowsCount > 0: ', dbResponse.rowsCount > 0);
+        location.cacheHit(dbResponse);
+      } else {
+        console.log('no rows detected, in the else statement');
+        location.cacheMiss();
+      }
+    })
+    .catch(console.error);
+}
+
+Location.prototype = {
+  save: function() {
+    // query , formatted query, lat, long
+    // const SQL = `INSERT INTO locations (search_query, formatted_query, latitude, longitude) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id;`;
+    console.log('saving the data');
+    const SQL = `INSERT INTO locations(search_query, formatted_query, latitude, longitude) VALUES ($1, $2, $3, $4);`
+    const values = [this.search_query, this.formatted_query, this.latitude, this.longitude];
+    // console.log('SQL: ', SQL);
+    // console.log('values: ', values);
+    return client.query(SQL, values)
+      .then( (result) => {
+        console.log('result after inserting: ', result);
+        console.log('this: ', this);
+        console.log('result.rows: ', result.rows);
+        console.log('result.rows[0]: ', result.rows[0]);
+        // this.id = result.rows[0].id;
+        // console.log('this: ', this);
+        return this;
+      })
+  }
 }
 
 function Weather(day) {
@@ -75,12 +124,14 @@ function Movie(movieDBData) {
   this.overview = movieDBData.overview;
   this.average_votes = movieDBData.vote_average;
   this.total_votes = movieDBData.vote_count;
-  console.log(movieDBData.poster_path);
+
+  //handle null paths
   if (movieDBData.poster_path === null){
     this.image_url = 'https://via.placeholder.com/150';
   } else {
     this.image_url = `http://image.tmdb.org/t/p/w185//${movieDBData.poster_path}`;
   }
+
   this.popularity = movieDBData.popularity;
   this.released_on = movieDBData.release_date;
 }
@@ -117,37 +168,48 @@ function Trail(trailObj) {
     this.condition_time = date.toTimeString()
   }
 }
+
 // Helper Functions
-
 function getLocation(request, response) {
-
-  // console.log('location route hit');
-  searchToLatLong(request.query.data)
-    .then(location => { 
-      // console.log('this is our location', location);
-      return response.send(location)
-    })
-    .catch(error => handleError(error, response));
-
-}
-
-function searchToLatLong(query) {
   console.log('location route hit');
-  console.log('query: ', query); // Seattle
+  // console.log('query: ', query); // Seattle
 
-  // if query exists in database
-  //   send the data to the client
-  // else
-  //   API call
-  //   save data in db
+  Location.lookupLocation({
+    tableName: Location.table_name,
 
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
-  return superagent.get(url)
-    .then((res) => {
-      return new Location(query, res);
-    })
-    .catch(error => handleError(error));
+    query: request.query.data,
+
+    cacheHit: function(result) {
+      response.send(result.rows[0]);
+    },
+
+    cacheMiss: function(){
+      console.log('making a google maps API call')
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${this.query}&key=${process.env.GEOCODE_API_KEY}`;
+      superagent.get(url)
+        .then((res) => {
+          const location = new Location(this.query, res);
+          console.log('our new location: ', location);
+          location.save()
+            .then((location) => {
+              console.log('test');
+              return response.send(location);
+            });
+        })
+        .catch(error => handleError(error));
+    }
+  });
 }
+
+// function searchToLatLong(query) {
+//   console.log('making lat/long API request');
+//   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
+//   return superagent.get(url)
+//     .then((res) => {
+//       return new Location(query, res);
+//     })
+//     .catch(error => handleError(error));
+// }
 
 function getWeather(request, response) {
   // console.log('weather route hit');
