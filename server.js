@@ -4,9 +4,22 @@
 const express = require('express');
 const superagent = require('superagent');
 const cors = require('cors');
+const pg = require('pg');
 
 // Load environment variables from .env file
 require('dotenv').config();
+
+// Database configuration
+const client = new pg.Client(process.env.DATABASE_URL);
+client.connect();
+client.on('error', (err) => console.error(err));
+// console.log('client: ', client);
+console.log('~~~~~~~~~');
+let test = client.query('SELECT * FROM locations')
+  .then( (response) => console.log(response));
+console.log(test);
+console.log('~~~~~~~~~');
+
 
 // Application Setup
 const app = express();
@@ -14,15 +27,7 @@ const PORT = process.env.PORT;
 app.use(cors());
 
 // API Routes
-app.get('/location', (request, response) => {
-  // console.log('location route hit');
-  searchToLatLong(request.query.data)
-    .then(location => { 
-      // console.log('this is our location', location);
-      return response.send(location)
-    })
-    .catch(error => handleError(error, response));
-})
+app.get('/location', getLocation);
 
 app.get('/weather', getWeather);
 
@@ -48,6 +53,8 @@ function Location(query, res) {
   this.formatted_query = res.body.results[0].formatted_address;
   this.latitude = res.body.results[0].geometry.location.lat;
   this.longitude = res.body.results[0].geometry.location.lng;
+
+  // console.log(this);
 }
 
 function Weather(day) {
@@ -68,7 +75,12 @@ function Movie(movieDBData) {
   this.overview = movieDBData.overview;
   this.average_votes = movieDBData.vote_average;
   this.total_votes = movieDBData.vote_count;
-  this.image_url = `http://image.tmdb.org/t/p/w185//${movieDBData.poster_path}`;
+  console.log(movieDBData.poster_path);
+  if (movieDBData.poster_path === null){
+    this.image_url = 'https://via.placeholder.com/150';
+  } else {
+    this.image_url = `http://image.tmdb.org/t/p/w185//${movieDBData.poster_path}`;
+  }
   this.popularity = movieDBData.popularity;
   this.released_on = movieDBData.release_date;
 }
@@ -106,8 +118,29 @@ function Trail(trailObj) {
   }
 }
 // Helper Functions
-function searchToLatLong(query) {
+
+function getLocation(request, response) {
+
   // console.log('location route hit');
+  searchToLatLong(request.query.data)
+    .then(location => { 
+      // console.log('this is our location', location);
+      return response.send(location)
+    })
+    .catch(error => handleError(error, response));
+
+}
+
+function searchToLatLong(query) {
+  console.log('location route hit');
+  console.log('query: ', query); // Seattle
+
+  // if query exists in database
+  //   send the data to the client
+  // else
+  //   API call
+  //   save data in db
+
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
   return superagent.get(url)
     .then((res) => {
@@ -169,3 +202,6 @@ function getTrails(request, response) {
     })
     .catch( (error) => handleError(error, response));
 }
+
+
+
