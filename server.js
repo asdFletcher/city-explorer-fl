@@ -148,10 +148,6 @@ Yelp.prototype = {
     const values = [this.name, this.image_url, this.price, this.rating, this.url, this.created_at, location_id];
     // console.log(`SQL: ${SQL}, Values: ${values}`);
     client.query(SQL, values)
-      .then( (dbResponse) => {
-        // console.log('dbResponse from saving restaurant: ', dbResponse);
-
-      })
       .catch( (err) => handleError(err));
   }
 }
@@ -187,6 +183,7 @@ Movie.prototype.save = function(location_id) {
 }
 
 function Meetup(meetupAPIData) {
+  this.tableName = 'meetups';
   this.link = meetupAPIData.link;
   this.name = meetupAPIData.name;
 
@@ -198,6 +195,17 @@ function Meetup(meetupAPIData) {
   }
   this.host = meetupAPIData.group.name;
   this.created_at = Date.now();
+}
+Meetup.tableName = 'meetups';
+Meetup.lookup = lookup;
+
+Meetup.prototype.save = function(location_id) {
+  console.log('in the meetup save');
+  const SQL = `INSERT INTO ${this.tableName} (link, name, creation_date, host, created_at, location_id) VALUES ($1, $2, $3, $4, $5, $6);`;
+  const values = [this.link, this.name, this.creation_date, this.host, this.created_at, location_id];
+  // console.log(`SQL: ${SQL}, Values: ${values}`);
+  client.query(SQL, values)
+    .catch( (err) => handleError(err));
 }
 
 function Trail(trailObj) {
@@ -244,7 +252,7 @@ function getWeather(request, response) {
     cacheHit: function(dbResult) {
       // check if valid
       let ageOfResultsInMinutes = (Date.now() - dbResult.rows[0].created_at) / (1000 * 60);
-      if (ageOfResultsInMinutes > 0){
+      if (ageOfResultsInMinutes > 30){
         // remove stale data
         // console.log(`detected old weather data, age: ${ageOfResultsInMinutes}`);
         deleteByLocationId(Weather.tableName, request.query.data.id);
@@ -321,7 +329,7 @@ function getMovies(request, response) {
       // console.log('in the movies hit function');
       let ageInDays = (Date.now() - dbResult.rows[0].created_at) / (1000 * 60 * 60 * 24 * 1);
       // console.log('age of movies: ', ageInDays) ;
-      if (ageInDays > 0){
+      if (ageInDays > 1){
         // console.log('detected stale movie data');
         deleteByLocationId(Movie.tableName, request.query.data.id);
         this.cacheMiss();
@@ -350,15 +358,48 @@ function getMovies(request, response) {
 
 function getMeetups(request, response) {
   // console.log('meetups route hit');
-  const url = `https://api.meetup.com/find/upcoming_events?lat=${request.query.data.latitude}&lon=${request.query.data.longitude}&key=${process.env.MEETUPS_API_KEY}&sign=true`;
-  superagent.get(url)
-    .then( (res) => {
-      const meetupsArray = res.body.events.map( (rawEventData) => {
-        return new Meetup(rawEventData);
-      } );
-      response.send( meetupsArray );
-    })
-    .catch( (error) => handleError(error, response) );
+  Meetup.lookup({
+    location: request.query.data.id,
+    tableName: Meetup.tableName,
+    cacheHit: function(dbResult){
+      // console.log('in the Meetups hit function');
+      let ageInHours = (Date.now() - dbResult.rows[0].created_at) / (1000 * 60 * 60);
+      console.log('age of Meetups: ', ageInHours) ;
+      if (ageInHours > 1){
+        // console.log('detected stale meetup data');
+        deleteByLocationId(Meetup.tableName, request.query.data.id);
+        this.cacheMiss();
+      } else {
+        // console.log('sending meetup cache data to client');
+        response.send(dbResult.rows);
+      }
+    },
+    cacheMiss: function(){
+      // console.log('in the meetups miss function');
+      const url = `https://api.meetup.com/find/upcoming_events?lat=${request.query.data.latitude}&lon=${request.query.data.longitude}&key=${process.env.MEETUPS_API_KEY}&sign=true`;
+      superagent.get(url)
+        .then((res) => {
+          let allMeetups = res.body.events.map( (rawEventData) => {
+            const newMeetup = new Meetup(rawEventData)
+            newMeetup.save(request.query.data.id); // save to database
+            return newMeetup;
+          });
+          response.send(allMeetups); // send to user
+        })
+        .catch(error => handleError(error, response));
+    },
+  });
+
+
+  // const url = `https://api.meetup.com/find/upcoming_events?lat=${request.query.data.latitude}&lon=${request.query.data.longitude}&key=${process.env.MEETUPS_API_KEY}&sign=true`;
+  // superagent.get(url)
+  //   .then( (res) => {
+  //     const meetupsArray = res.body.events.map( (rawEventData) => {
+  //       return new Meetup(rawEventData);
+  //     } );
+  //     response.send( meetupsArray );
+  //   })
+  //   .catch( (error) => handleError(error, response) );
 }
 
 function getTrails(request, response) {
