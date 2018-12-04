@@ -71,7 +71,7 @@ Location.lookupLocation = (location) => {
 
 Location.prototype = {
   save: function() {
-    console.log('saving the data');
+    // console.log('saving the data');
     // console.log('this.formatted_query: ', this.formatted_query);
     const SQL = `INSERT INTO locations(search_query, formatted_query, latitude, longitude) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id;`;
     const values = [this.search_query, this.formatted_query, this.latitude, this.longitude];
@@ -90,12 +90,12 @@ Location.cacheHit = function(result, response) {
 }
 
 Location.cacheMiss = function(response) {
-  console.log('making a google maps API call')
+  // console.log('making a google maps API call')
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${this.query}&key=${process.env.GEOCODE_API_KEY}`;
   superagent.get(url)
     .then((res) => {
       const location = new Location(this.query, res); // new Location from API data
-      console.log('our new location: ', location);
+      // console.log('our new location: ', location);
       location.save()
         .then((location) => {
           return response.send(location);
@@ -200,7 +200,7 @@ Meetup.tableName = 'meetups';
 Meetup.lookup = lookup;
 
 Meetup.prototype.save = function(location_id) {
-  console.log('in the meetup save');
+  // console.log('in the meetup save');
   const SQL = `INSERT INTO ${this.tableName} (link, name, creation_date, host, created_at, location_id) VALUES ($1, $2, $3, $4, $5, $6);`;
   const values = [this.link, this.name, this.creation_date, this.host, this.created_at, location_id];
   // console.log(`SQL: ${SQL}, Values: ${values}`);
@@ -209,6 +209,7 @@ Meetup.prototype.save = function(location_id) {
 }
 
 function Trail(trailObj) {
+  this.tableName = 'trails';
   this.name = trailObj.name;
   this.location = trailObj.location;
   this.length = trailObj.length;
@@ -227,6 +228,17 @@ function Trail(trailObj) {
     this.condition_time = date.toTimeString()
   }
   this.created_at = Date.now();
+}
+Trail.tableName = 'trails';
+Trail.lookup = lookup;
+
+Trail.prototype.save = function(location_id) {
+  // console.log('in the trail save');
+  const SQL = `INSERT INTO ${this.tableName} (name, location, length, stars, star_votes, summary, trail_url, conditions, condition_date, condition_time, created_at, location_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);`;
+  const values = [this.name, this.location, this.length, this.stars, this.star_votes, this.summary, this.trail_url, this.conditions, this.condition_date, this.condition_time, this.created_at, location_id];
+  // console.log(`SQL: ${SQL}, Values: ${values}`);
+  client.query(SQL, values)
+    .catch( (err) => handleError(err));
 }
 
 // Helper Functions
@@ -364,7 +376,7 @@ function getMeetups(request, response) {
     cacheHit: function(dbResult){
       // console.log('in the Meetups hit function');
       let ageInHours = (Date.now() - dbResult.rows[0].created_at) / (1000 * 60 * 60);
-      console.log('age of Meetups: ', ageInHours) ;
+      // console.log('age of Meetups: ', ageInHours);
       if (ageInHours > 1){
         // console.log('detected stale meetup data');
         deleteByLocationId(Meetup.tableName, request.query.data.id);
@@ -389,43 +401,57 @@ function getMeetups(request, response) {
         .catch(error => handleError(error, response));
     },
   });
-
-
-  // const url = `https://api.meetup.com/find/upcoming_events?lat=${request.query.data.latitude}&lon=${request.query.data.longitude}&key=${process.env.MEETUPS_API_KEY}&sign=true`;
-  // superagent.get(url)
-  //   .then( (res) => {
-  //     const meetupsArray = res.body.events.map( (rawEventData) => {
-  //       return new Meetup(rawEventData);
-  //     } );
-  //     response.send( meetupsArray );
-  //   })
-  //   .catch( (error) => handleError(error, response) );
 }
 
 function getTrails(request, response) {
   // console.log('trails route hit');
-  const url = `https://www.hikingproject.com/data/get-trails?lat=${request.query.data.latitude}&lon=${request.query.data.longitude}&maxDistance=10&key=${process.env.TRAILS_API_KEY}`;
-  superagent.get(url)
-    .then( (trailAPIData) => {
-      response.send( trailAPIData.body.trails.map( (trailObj) => new Trail(trailObj)));
-    })
-    .catch( (error) => handleError(error, response));
+  Trail.lookup({
+    location: request.query.data.id,
+    tableName: Trail.tableName,
+    cacheHit: function(dbResult){
+      // console.log('in the trails hit function');
+      let ageInDays = (Date.now() - dbResult.rows[0].created_at) / (1000 * 60 * 60 * 24 * 1);
+      // console.log('age of trails: ', ageInDays) ;
+      if (ageInDays > 0){
+        // console.log('detected stale trail data');
+        deleteByLocationId(Trail.tableName, request.query.data.id);
+        this.cacheMiss();
+      } else {
+        // console.log('sending trail cache data to client');
+        response.send(dbResult.rows);
+      }
+    },
+    cacheMiss: function(){
+      // console.log('in the trails miss function');
+      const url = `https://www.hikingproject.com/data/get-trails?lat=${request.query.data.latitude}&lon=${request.query.data.longitude}&maxDistance=10&key=${process.env.TRAILS_API_KEY}`;
+      superagent.get(url)
+        .then((trailAPIData) => {
+          let allTrails = trailAPIData.body.trails.map( (trailObj) => {
+            const newTrail = new Trail(trailObj);
+            newTrail.save(request.query.data.id); // save to database
+            return newTrail;
+          });
+          response.send(allTrails); // send to user
+        })
+        .catch(error => handleError(error, response));
+    },
+  });
 }
 
 function lookup(options) {
-  console.log(`looking up data from: ${options.tableName} route`);
+  // console.log(`looking up data from: ${options.tableName} route`);
   const SQL = `SELECT * from ${options.tableName} WHERE location_id=$1`;
   const values = [options.location];
-  console.log(`SQL: ${SQL} values: ${values}`);
+  // console.log(`SQL: ${SQL} values: ${values}`);
   client.query(SQL, values)
     .then( (response) => {
       if (response.rowCount > 0){
         // cache hit
-        console.log(`cache hit ${options.tableName}`)
+        // console.log(`cache hit ${options.tableName}`);
         options.cacheHit(response);
       } else {
         // cache miss
-        console.log(`cache miss ${options.tableName}`)
+        // console.log(`cache miss ${options.tableName}`);
         options.cacheMiss();
       }
     })
@@ -434,7 +460,7 @@ function lookup(options) {
 
 function deleteByLocationId(table, city){
   //sql delete
-  console.log(`deleting a table entry: ${city} from ${table}`);
+  // console.log(`deleting a table entry: ${city} from ${table}`);
   const SQL = `DELETE from ${table} WHERE location_id=${city}`;
   const response = client.query(SQL);
   // console.log(`response: ${response}`);
